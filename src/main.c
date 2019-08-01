@@ -16,11 +16,12 @@
 extern void output_grb_pc2(uint8_t *ptr, uint16_t count);
 
 volatile uint32_t frame;
+volatile uint8_t pos;
 
 device_effect device_profiles[DEVICE_COUNT];
 global_settings globals_addr;
 
-#define BRIGHTNESS 255
+#define MAX_LEDS 13
 
 int main() {
     /* Setup ports */
@@ -45,14 +46,10 @@ int main() {
         uint16_t times[6] = {0};
         times[TIME_FADEOUT] = 500;
 
-        uint8_t colors[9];
-        set_color_grb(colors, 0, COLOR_RED);
-        set_color_grb(colors, 1, COLOR_GREEN);
-        set_color_grb(colors, 2, COLOR_BLUE);
+        memset(leds, 0, MAX_LEDS * 3);
+        digital_effect(RAINBOW, leds + pos * 3, 1, 0, frame, times, args, 0, 0);
 
-        digital_effect(RAINBOW, leds, LED_COUNT, 0, frame, times, args, colors, 3);
-
-        output_grb_pc2(leds, sizeof(leds));
+        output_grb_pc2(leds, MAX_LEDS * 3);
 
         frame++;
 
@@ -63,4 +60,18 @@ int main() {
 /* UART RX interrupt */
 ISR(USART_RX_vect) {
     uint8_t val = UDR0;
+
+    if(val == 'r') {
+        if(pos < MAX_LEDS - 1) {
+            pos++;
+        }
+    }
+
+    if(val == 'l') {
+        if(pos > 0) {
+            pos--;
+        }
+    }
+
+    uart_send(pos);
 }
