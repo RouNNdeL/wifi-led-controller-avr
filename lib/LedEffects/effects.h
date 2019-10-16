@@ -15,6 +15,8 @@
 #define RAINBOW_MODE_BIT 2
 #define RAINBOW_SIMPLE_BIT 3
 
+#define PARTICLES_BLEND_BIT 2
+
 #define DIRECTION (1 << DIRECTION_BIT)
 #define SMOOTH (1 << SMOOTH_BIT)
 
@@ -23,6 +25,8 @@
 
 #define RAINBOW_MODE (1 << RAINBOW_MODE_BIT)
 #define RAINBOW_SIMPLE (1 << RAINBOW_SIMPLE_BIT)
+
+#define PARTICLES_BLEND (1 << PARTICLES_BLEND_BIT)
 
 #define ARG_BREATHE_START 1
 #define ARG_BREATHE_END 2
@@ -87,6 +91,17 @@ scale8(r, brightness), scale8(g, brightness), scale8(b, brightness)
 #define COLOR_MAGENTA rgb(255, 0, 255)
 #define COLOR_CYAN rgb(0, 255, 255)
 
+#if (LED_COUNT > 85)
+typedef uint16_t led_index_t;
+#else
+typedef uint8_t led_index_t;
+#endif /* (LED_COUNT > 85) */
+
+#if (LED_COUNT > 255)
+typedef uint16_t led_count_t;
+#else
+typedef uint8_t led_count_t;
+#endif /* (LED_COUNT > 255) */
 typedef enum
 {
     BREATHE = 0x00,
@@ -107,7 +122,7 @@ void set_all_colors(uint8_t *p_buf, uint8_t r, uint8_t g, uint8_t b, uint8_t cou
 
 void set_color(uint8_t *p_buf, uint8_t led, uint8_t r, uint8_t g, uint8_t b);
 
-#define set_color_grb(buf, led, ...) set_color(buf, led, _grb(__VA_ARGS__))
+void set_color_grb(uint8_t *p_buf, uint8_t led, uint8_t r, uint8_t g, uint8_t b);
 
 void cross_fade(uint8_t *color, uint8_t *colors, uint8_t n_color, uint8_t m_color, uint8_t progress);
 
@@ -117,8 +132,8 @@ void rotate_buf(uint8_t *leds, uint8_t led_count, uint16_t rotation_progress, ui
 void simple_effect(effect effect, uint8_t *color, uint32_t frame, uint16_t *times, uint8_t *args, uint8_t *colors,
                    uint8_t color_count, uint8_t grb);
 
-void digital_effect(effect effect, uint8_t *leds, uint8_t led_count, uint8_t offset, uint32_t frame,
-                    uint16_t *times, uint8_t *args, uint8_t *colors, uint8_t color_count);
+void digital_effect(effect effect, uint8_t *leds, uint8_t led_count, uint8_t start_led, uint32_t frame, uint16_t *times,
+                    uint8_t *args, uint8_t *colors, uint8_t color_count);
 
 uint8_t demo_music(uint8_t *fan_buf, uint8_t *pc_buf, uint8_t *gpu_buf, uint32_t frame);
 
