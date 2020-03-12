@@ -70,8 +70,6 @@ int main() {
     /* Setup UART */
     init_uart();
 
-    uart_buffer_add(12);
-
     uint8_t led_buffer[LED_COUNT * 3];
     memset(led_buffer, 0, LED_COUNT * 3);
     settings[0].flags = 1;
