@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include "effects.h"
 
+#ifdef ARDUINO
 /* Credit: https://github.com/FastLED/FastLED */
 uint8_t scale8(uint8_t i, uint8_t scale) {
     asm volatile(
@@ -31,6 +32,14 @@ uint8_t scale8(uint8_t i, uint8_t scale) {
     /* Return the result */
     return i;
 }
+
+#else
+
+uint8_t scale8(uint8_t i, uint8_t scale) {
+    return (i * scale >> 8) + 1;
+}
+
+#endif
 
 
 void set_color(uint8_t *p_buf, uint8_t led, uint8_t r, uint8_t g, uint8_t b) {

@@ -5,21 +5,17 @@
 #ifndef AVR_MEMORY_H
 #define AVR_MEMORY_H
 
-#include "../../../../../.platformio/packages/toolchain-atmelavr/avr/include/stdint.h"
+#include "stdint.h"
 #include "config.h"
+
+#define FLAG_ON (1 << 0)
 
 typedef struct
 {
-    uint8_t brightness[DEVICE_COUNT];
-    uint8_t flags[DEVICE_COUNT];
-    uint8_t color[3 * DEVICE_COUNT];
-    uint8_t current_device_profile[DEVICE_COUNT];
-    uint8_t profile_count;
-    uint8_t current_profile;
-    uint8_t auto_increment;
-    int8_t profiles[PROFILE_COUNT][DEVICE_COUNT];
-    uint8_t profile_flags[PROFILE_COUNT];
-} __attribute__((packed)) global_settings;
+    uint8_t brightness;
+    uint8_t flags;
+    uint8_t color[3];
+} __attribute__((packed)) device_settings;
 
 typedef struct
 {
