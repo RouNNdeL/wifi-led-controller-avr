@@ -91,6 +91,7 @@ int main() {
 
     uart_data = NULL;
     new_frame = 1;
+    frame = 0;
     uart_invalid_count = 0;
 
     uint8_t led_buffer[LED_COUNT * 3];
@@ -138,7 +139,7 @@ int main() {
                     if (uart_receive_size != get_expected_message_size(uart_cmd)) {
                         uart_send(UART_INVALID_LENGTH);
                         uart_state = STATE_NONE;
-                    } else if(uart_receive_size > 0){
+                    } else if (uart_receive_size > 0) {
                         uart_state = STATE_RECEIVE_DATA;
                     } else {
                         uart_state = STATE_RECEIVE_DONE;
@@ -152,6 +153,10 @@ int main() {
 
                     if (uart_receive_size > 0) {
                         uart_data = malloc((size_t) uart_receive_size);
+                        if (uart_data == NULL) {
+                            reboot();
+                        }
+
                         for (uint8_t i = 0; i < uart_receive_size; ++i) {
                             uart_data[i] = uart_buffer_poll();
                         }
@@ -173,6 +178,7 @@ int main() {
                         uart_send(UART_INVALID_SEQUENCE);
                     }
 
+                    free(uart_data);
                     uart_state = STATE_NONE;
                     break;
                 default:
@@ -189,9 +195,8 @@ int main() {
                 uint8_t led_count = virtual_led_count[i];
                 uint8_t *index = led_buffer + led_index * 3;
                 if (settings[i].flags & FLAG_ON) {
-                    set_all_colors(index,
-                                   color_brightness(settings[i].brightness, color_from_buf(settings[i].color)),
-                                   led_count, true);
+                    set_all_colors(index, color_brightness(settings[i].brightness,
+                                                           color_from_buf(settings[i].color)), led_count, true);
                 } else {
                     memset(index, 0, led_count * 3);
                 }
@@ -202,7 +207,7 @@ int main() {
             output_grb_pc2(led_buffer, sizeof(led_buffer));
             wdt_reset();
 
-            if(frame >= reboot_frame) {
+            if (frame >= reboot_frame) {
                 reboot();
             }
         }
