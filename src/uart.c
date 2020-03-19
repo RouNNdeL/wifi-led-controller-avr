@@ -7,10 +7,10 @@
 #include "memory.h"
 #include <stdbool.h>
 
-volatile int8_t uart_buffer[UART_BUFFER_SIZE];
-volatile int8_t front = 0;
-volatile int8_t rear = -1;
-volatile uint8_t itemCount = 0;
+volatile uint8_t uart_buffer[UART_BUFFER_SIZE];
+volatile uart_buffer_t front = 0;
+volatile int32_t rear = -1;
+volatile uart_buffer_t itemCount = 0;
 
 bool uart_buffer_is_empty() {
     return itemCount == 0;
@@ -20,19 +20,27 @@ bool is_full() {
     return itemCount == UART_BUFFER_SIZE;
 }
 
+void uart_buffer_reset() {
+    front = 0;
+    rear = -1;
+    itemCount = 0;
+}
+
 uint8_t uart_buffer_size() {
     return itemCount;
 }
 
-void uart_buffer_add(uint8_t data) {
-    if (!is_full()) {
+bool uart_buffer_add(uint8_t data) {
+    if (itemCount < UART_BUFFER_SIZE) {
         if (rear == UART_BUFFER_SIZE - 1) {
             rear = -1;
         }
 
         uart_buffer[++rear] = data;
         itemCount++;
+        return true;
     }
+    return false;
 }
 
 uint8_t uart_buffer_poll() {
