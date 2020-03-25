@@ -43,8 +43,10 @@ void reboot() {
 
 uint8_t get_expected_message_size(uint8_t command) {
     switch (command) {
-        case CMD_SIMPLE_DATA:
+        case CMD_SAVE_DEVICE:
             return 6;
+        case CMD_GET_DEVICE:
+            return 1;
         case CMD_REBOOT:
             return 0;
         default:
@@ -53,12 +55,18 @@ uint8_t get_expected_message_size(uint8_t command) {
 }
 
 uint8_t valid_command(uint8_t command) {
-    return command == CMD_SIMPLE_DATA || command == CMD_REBOOT;
+    return command == CMD_SAVE_DEVICE || command == CMD_GET_DEVICE || command == CMD_REBOOT;
 }
 
+/**
+ *
+ * @param cmd command to process
+ * @param data data buffer
+ * @return whether ACK should be sent
+ */
 bool handle_data(uint8_t cmd, uint8_t *data) {
     switch (cmd) {
-        case CMD_SIMPLE_DATA: {
+        case CMD_SAVE_DEVICE: {
             uint8_t device_index = data[0];
             if (device_index < DEVICE_COUNT) {
                 memcpy(&settings[device_index], data + 1, sizeof(device_settings));
@@ -69,6 +77,18 @@ bool handle_data(uint8_t cmd, uint8_t *data) {
                 uart_send(UART_DEVICE_INDEX_OUT_OF_BOUNDS);
             }
             break;
+        }
+        case CMD_GET_DEVICE: {
+            uint8_t device_index = data[0];
+            if (device_index < DEVICE_COUNT) {
+                uart_send(UART_ACK);
+                uart_send(UART_DEVICE_DATA_START);
+                uart_send_bytes((uint8_t *) &settings[device_index], sizeof(device_settings));
+                uart_send(UART_DEVICE_DATA_END);
+                return false;
+            } else {
+                uart_send(UART_DEVICE_INDEX_OUT_OF_BOUNDS);
+            }
         }
         case CMD_REBOOT:
             reboot_frame = frame + REBOOT_DELAY;
@@ -174,7 +194,7 @@ void output_leds() {
 
 void save_modified() {
     for (uint8_t i = 0; i < DEVICE_COUNT; ++i) {
-        if(device_modified[i]) {
+        if (device_modified[i]) {
             save_settings(&settings[i], i);
             device_modified[i] = 0;
         }
@@ -234,7 +254,7 @@ int main() {
                 reboot();
             }
 
-            if(frame >= save_frame) {
+            if (frame >= save_frame) {
                 save_modified();
             }
         }
