@@ -82,9 +82,11 @@ bool handle_data(uint8_t cmd, uint8_t *data) {
             uint8_t device_index = data[0];
             if (device_index < DEVICE_COUNT) {
                 uart_send(UART_ACK);
-                uart_send(UART_DEVICE_DATA_START);
+                uart_send(UART_BEGIN);
+                uart_send(CMD_DEVICE_RESPONSE);
+                uart_send(sizeof(device_settings));
                 uart_send_bytes((uint8_t *) &settings[device_index], sizeof(device_settings));
-                uart_send(UART_DEVICE_DATA_END);
+                uart_send(UART_END);
                 return false;
             } else {
                 uart_send(UART_DEVICE_INDEX_OUT_OF_BOUNDS);
