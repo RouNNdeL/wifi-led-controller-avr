@@ -8,7 +8,7 @@
 #define VERSION_CODE 1
 #define VERSION_NAME "0.0.1"
 
-#define UART_BUFFER_SIZE 20
+#define UART_BUFFER_SIZE 64
 
 #if UART_BUFFER_SIZE <= 255
 typedef uint8_t uart_buffer_t;
@@ -23,6 +23,9 @@ typedef uint16_t uart_buffer_t;
 #endif
 
 #define FPS 64
+/* Setting this to a low value may result in the EEPROM's write capabilities to wear out quickly */
+#define SAVE_DELAY 5 * FPS
+#define REBOOT_DELAY FPS / 10
 #define TRANSITION_FRAMES 32
 #define TRANSITION_QUICK_FRAMES 20
 
@@ -39,7 +42,7 @@ typedef uint16_t transition_t;
 #endif
 
 #ifndef VIRTUAL_DEVICES
-#define VIRTUAL_DEVICES {1,6,6}
+#define VIRTUAL_DEVICES {1, 6, 6}
 #endif /* VIRTUAL_DEVICES */
 
 #ifndef LED_PIN
@@ -47,7 +50,7 @@ typedef uint16_t transition_t;
 #endif /* LED_PIN */
 
 #ifndef LED_COUNT
-#define LED_COUNT 13
+#define LED_COUNT 109
 #endif /* LED_COUNT */
 
 #ifndef PROFILE_COUNT

@@ -87,5 +87,5 @@ add_custom_target(
 )
 
 FILE(GLOB SRC_LIST src/*.c)
-FILE(GLOB GLOB_RECURSE test/*.c)
-add_executable(Z_DUMMY_TARGET ${SRC_LIST} ${TEST_LIST} test/test_desktop/test_queue.cpp)
+FILE(GLOB GLOB_RECURSE test/**/*.c)
+add_executable(Z_DUMMY_TARGET ${SRC_LIST})

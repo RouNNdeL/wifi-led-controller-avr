@@ -26,4 +26,10 @@ typedef struct
     uint8_t colors[COLOR_COUNT * 3];
 } __attribute__((packed)) device_effect;
 
+void read_settings(device_settings* settings, uint8_t device_index);
+
+void save_settings(device_settings* settings, uint8_t device_index);
+
+void read_all_settings(device_settings settings[DEVICE_COUNT]);
+
 #endif //AVR_MEMORY_H
