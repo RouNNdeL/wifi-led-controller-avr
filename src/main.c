@@ -20,6 +20,7 @@ volatile uint8_t uart_receive_size;
 volatile uint8_t uart_state;
 uint8_t *uart_data;
 uint8_t uart_cmd;
+packet_data_t current_packet;
 uint8_t uart_invalid_count;
 
 volatile uint8_t new_frame;
@@ -47,6 +48,8 @@ uint8_t get_expected_message_size(uint8_t command) {
             return 6;
         case CMD_GET_DEVICE:
             return 1;
+        case CMD_GET_ALL_DEVICES:
+            return 0;
         case CMD_REBOOT:
             return 0;
         default:
@@ -55,16 +58,17 @@ uint8_t get_expected_message_size(uint8_t command) {
 }
 
 uint8_t valid_command(uint8_t command) {
-    return command == CMD_SAVE_DEVICE || command == CMD_GET_DEVICE || command == CMD_REBOOT;
+    return command == CMD_SAVE_DEVICE || command == CMD_GET_DEVICE ||
+           command == CMD_GET_ALL_DEVICES || command == CMD_REBOOT;
 }
 
 /**
  *
  * @param cmd command to process
  * @param data data buffer
- * @return whether ACK should be sent
+ * @return non 0 if an ack response should be sent
  */
-bool handle_data(uint8_t cmd, uint8_t *data) {
+uint8_t handle_data(uint8_t cmd, uint8_t *data) {
     switch (cmd) {
         case CMD_SAVE_DEVICE: {
             uint8_t device_index = data[0];
@@ -72,7 +76,7 @@ bool handle_data(uint8_t cmd, uint8_t *data) {
                 memcpy(&settings[device_index], data + 1, sizeof(device_settings));
                 device_modified[device_index] = 1;
                 save_frame = frame + SAVE_DELAY;
-                return true;
+                return CMD_SAVE_DEVICE_RESPONSE;
             } else {
                 uart_send(UART_DEVICE_INDEX_OUT_OF_BOUNDS);
             }
@@ -81,37 +85,63 @@ bool handle_data(uint8_t cmd, uint8_t *data) {
         case CMD_GET_DEVICE: {
             uint8_t device_index = data[0];
             if (device_index < DEVICE_COUNT) {
-                uart_send(UART_ACK);
                 uart_send(UART_BEGIN);
                 uart_send(CMD_DEVICE_RESPONSE);
                 uart_send(sizeof(device_settings));
                 uart_send_bytes((uint8_t *) &settings[device_index], sizeof(device_settings));
                 uart_send(UART_END);
-                return false;
+                return 0;
             } else {
                 uart_send(UART_DEVICE_INDEX_OUT_OF_BOUNDS);
+                return 0;
             }
         }
+        case CMD_GET_ALL_DEVICES:
+            uart_send(UART_ACK);
+            uart_send(UART_BEGIN);
+            uart_send_bytes((uint8_t *) &current_packet, sizeof(current_packet));
+            uart_send(CMD_ALL_DEVICES_RESPONSE);
+            uart_send(sizeof(device_settings) * DEVICE_COUNT + 1);
+            uart_send(DEVICE_COUNT);
+
+            for (uint8_t i = 0; i < DEVICE_COUNT; ++i) {
+                uart_send_bytes((uint8_t *) &settings[i], sizeof(device_settings));
+            }
+
+            uart_send(UART_END);
         case CMD_REBOOT:
             reboot_frame = frame + REBOOT_DELAY;
-            return true;
+            return CMD_REBOOT_RESPONSE;
     }
 
-    return false;
+    return 0;
 }
 
 void handle_uart() {
-
     switch (uart_state) {
         case STATE_NONE: {
             uint8_t val = uart_buffer_poll();
             if (val == UART_BEGIN) {
                 uart_invalid_count = 0;
-                uart_state = STATE_RECEIVE_COMMAND;
+                uart_state = STATE_RECEIVE_PACKET_DATA;
             } else {
                 uart_send(UART_INVALID_SEQUENCE);
                 uart_invalid_count++;
             }
+            break;
+        }
+        case STATE_RECEIVE_PACKET_DATA: {
+            if (uart_buffer_size() < sizeof(packet_data_t)) {
+                break;
+            }
+
+            uint8_t buf[sizeof(packet_data_t)];
+            for (size_t i = 0; i < sizeof(packet_data_t); ++i) {
+                buf[i] = uart_buffer_poll();
+            }
+
+            memcpy(&current_packet, buf, sizeof(packet_data_t));
+            uart_state = STATE_RECEIVE_COMMAND;
             break;
         }
         case STATE_RECEIVE_COMMAND:
@@ -157,8 +187,13 @@ void handle_uart() {
         case STATE_RECEIVE_DONE:
             if (uart_buffer_poll() == UART_END) {
                 if (uart_data != NULL || uart_receive_size == 0) {
-                    if (handle_data(uart_cmd, uart_data)) {
-                        uart_send(UART_ACK);
+                    uint8_t response_cmd = handle_data(uart_cmd, uart_data);
+                    if (response_cmd) {
+                        uart_send(UART_BEGIN);
+                        uart_send_bytes((uint8_t *) &current_packet, sizeof(current_packet));
+
+                        uint8_t ack_buf[] = {response_cmd, 1, UART_ACK, UART_END};
+                        uart_send_bytes(ack_buf, sizeof(ack_buf));
                     }
                 }
 
@@ -249,7 +284,9 @@ int main() {
             new_frame = 0;
             frame++;
 
-            output_leds();
+            if (uart_state == STATE_NONE) {
+                output_leds();
+            }
             wdt_reset();
 
             if (frame >= reboot_frame) {

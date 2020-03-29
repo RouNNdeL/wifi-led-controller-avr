@@ -11,12 +11,12 @@
 #define BAUD 38400                                   // define baud
 #define BAUDRATE ((F_CPU)/(BAUD*16UL)-1)            // set baud rate value for UBRR
 
-#define DATA_AVAILABLE 0x7F
 #define STATE_NONE 0x00
-#define STATE_RECEIVE_COMMAND 0x01
-#define STATE_RECEIVE_LENGTH 0x02
-#define STATE_RECEIVE_DATA 0x03
-#define STATE_RECEIVE_DONE 0x04
+#define STATE_RECEIVE_PACKET_DATA 0x01
+#define STATE_RECEIVE_COMMAND 0x02
+#define STATE_RECEIVE_LENGTH 0x03
+#define STATE_RECEIVE_DATA 0x04
+#define STATE_RECEIVE_DONE 0x05
 
 #define UART_BEGIN 0xB0
 #define UART_END 0xB1
@@ -24,14 +24,23 @@
 
 #define CMD_SAVE_DEVICE 0x01
 #define CMD_GET_DEVICE 0x02
-#define CMD_DEVICE_RESPONSE 0x03
+#define CMD_GET_ALL_DEVICES 0x03
+#define CMD_SAVE_DEVICE_RESPONSE 0xA1
+#define CMD_DEVICE_RESPONSE 0xA2
+#define CMD_ALL_DEVICES_RESPONSE 0xA3
 #define CMD_REBOOT 0xFF
+#define CMD_REBOOT_RESPONSE 0xFF
 
 #define UART_BUFFER_OVERFLOW 0xE0
 #define UART_INVALID_SEQUENCE 0xE1
 #define UART_INVALID_LENGTH 0xE2
 #define UART_DEVICE_INDEX_OUT_OF_BOUNDS 0xF1
 #define UART_INVALID_COMMAND 0xF2
+
+typedef struct {
+    uint8_t client_id;
+    uint16_t packet_id;
+} __attribute__((packed)) packet_data_t;
 
 void init_uart();
 
@@ -46,6 +55,8 @@ bool is_full();
 uint8_t uart_buffer_size();
 
 bool uart_buffer_add(uint8_t data);
+
+uint8_t uart_buffer_peak();
 
 uint8_t uart_buffer_poll();
 

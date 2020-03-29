@@ -43,6 +43,10 @@ bool uart_buffer_add(uint8_t data) {
     return false;
 }
 
+uint8_t uart_buffer_peak() {
+    return uart_buffer[front];
+}
+
 uint8_t uart_buffer_poll() {
     uint8_t data = uart_buffer[front++];
 
