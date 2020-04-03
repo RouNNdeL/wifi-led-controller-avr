@@ -22,7 +22,8 @@ typedef uint8_t uart_buffer_t;
 typedef uint16_t uart_buffer_t;
 #endif
 
-#define FPS 64
+#define FPS 16
+#define TIMER_DIVIDE 4
 /* Setting this to a low value may result in the EEPROM's write capabilities to wear out quickly */
 #define SAVE_DELAY 5 * FPS
 #define REBOOT_DELAY FPS / 10
@@ -42,7 +43,7 @@ typedef uint16_t transition_t;
 #endif
 
 #ifndef VIRTUAL_DEVICES
-#define VIRTUAL_DEVICES {1, 6, 6}
+#define VIRTUAL_DEVICES {1, 54, 54}
 #endif /* VIRTUAL_DEVICES */
 
 #ifndef LED_PIN

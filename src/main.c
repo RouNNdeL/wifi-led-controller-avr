@@ -97,7 +97,6 @@ uint8_t handle_data(uint8_t cmd, uint8_t *data) {
             }
         }
         case CMD_GET_ALL_DEVICES:
-            uart_send(UART_ACK);
             uart_send(UART_BEGIN);
             uart_send_bytes((uint8_t *) &current_packet, sizeof(current_packet));
             uart_send(CMD_ALL_DEVICES_RESPONSE);
@@ -280,9 +279,8 @@ int main() {
             handle_uart();
         }
 
-        if (new_frame) {
+        if (new_frame && !(frame % TIMER_DIVIDE)) {
             new_frame = 0;
-            frame++;
 
             if (uart_state == STATE_NONE) {
                 output_leds();
@@ -310,4 +308,5 @@ ISR(USART_RX_vect) {
 
 ISR(TIMER1_COMPA_vect) {
     new_frame = 1;
+    frame++;
 }
