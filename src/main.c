@@ -263,9 +263,18 @@ void scale_timings(uint16_t src[TIME_COUNT], uint16_t dst[TIME_COUNT], uint8_t s
 void output_effect(device_settings s, uint8_t* index, led_count_t led_count) {
     device_effect effect = device_effects[s.effect % EFFECT_COUNT];
     uint16_t timing[TIME_COUNT];
-    scale_timings(effect.timing, timing, s.effect_speed, effect.timing_mask);
+    scale_timings(effect.timing, timing, s.effect_speed, effect.flags);
+    uint8_t* colors;
+    uint8_t color_count; // Safety for effects with invalid configuration
+    if(effect.flags & EFFECT_FLAG_INHERIT_COLOR) {
+        colors = s.color;
+        color_count = 1;
+    } else {
+        colors = effect.colors;
+        color_count = effect.color_count;
+    }
     digital_effect(effect.effect, index, led_count, 0, frame,
-                   timing, effect.args, effect.colors, effect.color_count);
+                   timing, effect.args, colors, color_count);
 
     for (uint8_t j = 0; j < led_count; ++j) {
         set_color_manual(index + j, color_brightness(s.brightness, color_from_buf(index + j)));

@@ -13,9 +13,9 @@ void police_switching(device_effect *effect, uint8_t piece_count);
 
 void police_blinking(device_effect* effect);
 
-void breathing(device_effect* effect, uint8_t r, uint8_t g, uint8_t b);
+void breathing(device_effect* effect);
 
-void breathing_full(device_effect* effect, uint8_t min, uint8_t max, uint8_t r, uint8_t g, uint8_t b);
+void breathing_full(device_effect* effect, uint8_t min, uint8_t max);
 
 
 #endif //AVR_PREMADE_EFFECTS_H
