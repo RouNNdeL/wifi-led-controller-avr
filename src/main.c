@@ -11,14 +11,14 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include "uart.h"
-#include "memory.h"
+#include <uart.h>
+#include <memory.h>
 
-extern void output_grb_pc2(uint8_t *ptr, uint16_t count);
+extern void output_grb_pc2(uint8_t* ptr, uint16_t count);
 
 volatile uint8_t uart_receive_size;
 volatile uint8_t uart_state;
-uint8_t *uart_data;
+uint8_t* uart_data;
 uint8_t uart_cmd;
 packet_data_t current_packet;
 uint8_t uart_invalid_count;
@@ -30,10 +30,17 @@ uint32_t save_frame;
 
 uint8_t device_modified[DEVICE_COUNT] = {0};
 
-uint8_t virtual_led_count[DEVICE_COUNT] = VIRTUAL_DEVICES;
+led_count_t virtual_led_count[DEVICE_COUNT] = VIRTUAL_DEVICES;
 device_settings settings[DEVICE_COUNT] = {0};
 
 uint8_t led_buffer[LED_COUNT * 3];
+
+/*
+ * TODO: Save effects in the EEPROM, and load on demand.
+ * We can introduce a config variable to compile to read effects from setup_effects and save them in the EEPROM.
+ * Then compile normally and read the EEPROM when needed.
+ */
+device_effect device_effects[EFFECT_COUNT] = {0};
 
 void reboot() {
     cli();
@@ -45,13 +52,11 @@ void reboot() {
 uint8_t get_expected_message_size(uint8_t command) {
     switch (command) {
         case CMD_SAVE_DEVICE:
-            return 6;
+            return sizeof(device_settings) + 1;
         case CMD_GET_DEVICE:
             return 1;
         case CMD_GET_ALL_DEVICES:
-            return 0;
         case CMD_REBOOT:
-            return 0;
         default:
             return 0;
     }
@@ -68,7 +73,7 @@ uint8_t valid_command(uint8_t command) {
  * @param data data buffer
  * @return non 0 if an ack response should be sent
  */
-uint8_t handle_data(uint8_t cmd, uint8_t *data) {
+uint8_t handle_data(uint8_t cmd, uint8_t* data) {
     switch (cmd) {
         case CMD_SAVE_DEVICE: {
             uint8_t device_index = data[0];
@@ -88,7 +93,7 @@ uint8_t handle_data(uint8_t cmd, uint8_t *data) {
                 uart_send(UART_BEGIN);
                 uart_send(CMD_DEVICE_RESPONSE);
                 uart_send(sizeof(device_settings));
-                uart_send_bytes((uint8_t *) &settings[device_index], sizeof(device_settings));
+                uart_send_bytes((uint8_t*) &settings[device_index], sizeof(device_settings));
                 uart_send(UART_END);
                 return 0;
             } else {
@@ -98,13 +103,13 @@ uint8_t handle_data(uint8_t cmd, uint8_t *data) {
         }
         case CMD_GET_ALL_DEVICES:
             uart_send(UART_BEGIN);
-            uart_send_bytes((uint8_t *) &current_packet, sizeof(current_packet));
+            uart_send_bytes((uint8_t*) &current_packet, sizeof(current_packet));
             uart_send(CMD_ALL_DEVICES_RESPONSE);
             uart_send(sizeof(device_settings) * DEVICE_COUNT + 1);
             uart_send(DEVICE_COUNT);
 
             for (uint8_t i = 0; i < DEVICE_COUNT; ++i) {
-                uart_send_bytes((uint8_t *) &settings[i], sizeof(device_settings));
+                uart_send_bytes((uint8_t*) &settings[i], sizeof(device_settings));
             }
 
             uart_send(UART_END);
@@ -189,7 +194,7 @@ void handle_uart() {
                     uint8_t response_cmd = handle_data(uart_cmd, uart_data);
                     if (response_cmd) {
                         uart_send(UART_BEGIN);
-                        uart_send_bytes((uint8_t *) &current_packet, sizeof(current_packet));
+                        uart_send_bytes((uint8_t*) &current_packet, sizeof(current_packet));
 
                         uint8_t ack_buf[] = {response_cmd, 1, UART_ACK, UART_END};
                         uart_send_bytes(ack_buf, sizeof(ack_buf));
@@ -210,17 +215,83 @@ void handle_uart() {
     }
 }
 
+uint16_t scale_timing(uint16_t time, uint8_t speed) {
+    switch (speed) {
+        case 0:
+            return 0;
+        case 1:
+            return time * 16;
+        case 2:
+            return time * 12;
+        case 3:
+            return time * 8;
+        case 4:
+            return time * 4;
+        case 5:
+            return time * 2;
+        case 6:
+            return time * 1.5;
+        case 7:
+            return time;
+        case 8:
+            return time / 1.5;
+        case 9:
+            return time / 2;
+        case 10:
+            return time / 4;
+        case 11:
+            return time / 8;
+        case 12:
+            return time / 12;
+        case 13:
+            return time / 16;
+        default:
+            return time;
+    }
+}
+
+void scale_timings(uint16_t src[TIME_COUNT], uint16_t dst[TIME_COUNT], uint8_t speed, uint8_t mask) {
+    for (uint8_t i = 0; i < TIME_COUNT; ++i) {
+        if (mask & (1 << i)) {
+            dst[i] = scale_timing(src[i], speed);
+        } else {
+            dst[i] = src[i];
+        }
+    }
+}
+
+void output_effect(device_settings s, uint8_t* index, led_count_t led_count) {
+    device_effect effect = device_effects[s.effect % EFFECT_COUNT];
+    uint16_t timing[TIME_COUNT];
+    scale_timings(effect.timing, timing, s.effect_speed, effect.timing_mask);
+    digital_effect(effect.effect, index, led_count, 0, frame,
+                   timing, effect.args, effect.colors, effect.color_count);
+
+    for (uint8_t j = 0; j < led_count; ++j) {
+        set_color_manual(index + j, color_brightness(s.brightness, color_from_buf(index + j)));
+    }
+}
+
 void output_leds() {
-    uint8_t led_index = 0;
-    for (uint8_t i = 0; i < DEVICE_COUNT; i++) {
-        uint8_t led_count = virtual_led_count[i];
-        uint8_t *index = led_buffer + led_index * 3;
+    led_count_t led_index = 0;
+    for (uint8_t i = 0; i < DEVICE_COUNT; ++i) {
+        led_count_t led_count = virtual_led_count[i];
+        uint8_t* index = led_buffer + led_index * 3;
         if (settings[i].flags & FLAG_ON) {
-            set_all_colors(index, color_brightness(settings[i].brightness,
-                                                   color_from_buf(settings[i].color)), led_count, true);
+            if (settings[i].flags & FLAG_EFFECT_ON) {
+                output_effect(settings[i], index, led_count);
+            } else {
+                set_all_colors(index, color_brightness(
+                        settings[i].brightness, color_from_buf(settings[i].color)), led_count, true);
+            }
         } else {
             memset(index, 0, led_count * 3);
         }
+
+        if (settings[i].flags & FLAG_LOG_BRIGHTNESS)
+            for (uint8_t j = 0; j < led_count; ++j) {
+                index[j] = actual_brightness(index[j]);
+            }
 
         led_index += led_count;
     }
@@ -263,8 +334,14 @@ void init_avr() {
     uart_invalid_count = 0;
     reboot_frame = UINT32_MAX;
     save_frame = UINT32_MAX;
-    read_all_settings(settings);
+    //read_all_settings(settings);
     memset(led_buffer, 0, LED_COUNT * 3);
+    settings[1].flags = FLAG_ON | FLAG_EFFECT_ON | FLAG_LOG_BRIGHTNESS;
+    settings[1].effect = 3;
+    settings[1].brightness = UINT8_MAX;
+    settings[1].effect_speed = 5;
+    set_color_manual(settings[1].color, COLOR_RED);
+    setup_effects(device_effects);
 }
 
 int main() {
