@@ -1,6 +1,8 @@
 #ifndef LEDCONTROLLER_COLOR_UTILS_H
 #define LEDCONTROLLER_COLOR_UTILS_H
 
+#include <stdint.h>
+
 #define actual_brightness(brightness) scale8(brightness, brightness)
 
 #define ARG_BIT_PACK 0
@@ -74,19 +76,19 @@ scale8(r, brightness), scale8(g, brightness), scale8(b, brightness)
 (buf)[1] = g;\
 (buf)[2] = b
 
-#define set_color_manuali(buf, index, ...) _set_color_manual(buf, index, __VA_ARGS__)
+#define set_color_manuali(buf, index, ...) _set_color_manuali(buf, index, __VA_ARGS__)
 #define _set_color_manuali(buf, index, r, g, b)\
 (buf)[index * 3 + 0] = r;\
 (buf)[index * 3 + 1] = g;\
 (buf)[index * 3 + 2] = b
 
-#define set_color_manual_grb(buf, ...) _set_color_manual(buf, __VA_ARGS__)
+#define set_color_manual_grb(buf, ...) _set_color_manual_grb(buf, __VA_ARGS__)
 #define _set_color_manual_grb(buf, r, g, b)\
 (buf)[0] = g;\
 (buf)[1] = r;\
 (buf)[2] = b
 
-#define set_color_manuali_grb(buf, index, ...) _set_color_manual(buf,index, __VA_ARGS__)
+#define set_color_manuali_grb(buf, index, ...) _set_color_manuali_grb(buf,index, __VA_ARGS__)
 #define _set_color_manuali_grb(buf, index, r, g, b)\
 (buf)[index * 3+ 0] = g;\
 (buf)[index * 3 + 1] = r;\
@@ -110,11 +112,12 @@ typedef uint16_t led_index_t;
 typedef uint8_t led_index_t;
 #endif /* (LED_COUNT > 85) */
 
-#if (LED_COUNT > 255)
-typedef uint16_t led_count_t;
-#else
+#if LED_COUNT <= 255
 typedef uint8_t led_count_t;
-#endif /* (LED_COUNT > 255) */
+#else
+typedef uint16_t led_count_t;
+#endif
+
 typedef enum {
     BREATHE = 0x00,
     FADE = 0x01,
@@ -128,9 +131,9 @@ typedef enum {
 
 } effect;
 
-uint8_t scale8(uint8_t i, uint8_t scale);
+ uint8_t scale8(uint8_t i, uint8_t scale);
 
-void set_all_colors(uint8_t* p_buf, uint8_t r, uint8_t g, uint8_t b, uint8_t count, uint8_t grb);
+void set_all_colors(uint8_t *p_buf, uint8_t r, uint8_t g, uint8_t b, uint8_t count);
 
 void set_color(uint8_t* p_buf, uint8_t led, uint8_t r, uint8_t g, uint8_t b);
 

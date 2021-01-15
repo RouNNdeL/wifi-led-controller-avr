@@ -6,8 +6,7 @@
 #define AVR_MEMORY_H
 
 #include <effects.h>
-#include "stdint.h"
-#include "config.h"
+#include <config.h>
 
 #define FLAG_ON (1 << 0)
 #define FLAG_EFFECT_ON (1 << 1)

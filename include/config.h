@@ -5,12 +5,12 @@
 #ifndef AVR_CONFIG_H
 #define AVR_CONFIG_H
 
-// Devices
-#include <memory.h>
+#include <stdint.h>
 
-#define VIRTUAL_DEVICES {1, 20}
-#define LED_COUNT 21
-#define DEVICE_COUNT 2
+// Devices
+#define VIRTUAL_DEVICES {1, 54,54}
+#define LED_COUNT 109
+#define DEVICE_COUNT 3
 
 // Effects
 #define EFFECT_COUNT 4
@@ -46,17 +46,5 @@ typedef uint16_t uart_buffer_t;
  * hence the option to disable it
  */
 #define TRANSITION_EFFECTS 0
-
-#if TRANSITION_FRAMES <= 255 && TRANSITION_QUICK_FRAMES <= 255
-typedef uint8_t transition_t;
-#else
-typedef uint16_t transition_t;
-#endif
-
-#if LED_COUNT <= 255
-typedef uint8_t led_count_t;
-#else
-typedef uint16_t led_count_t;
-#endif
 
 #endif //AVR_CONFIG_H

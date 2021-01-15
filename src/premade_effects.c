@@ -2,6 +2,7 @@
 // Created by krzys on 21/01/13.
 //
 
+#include <config.h>
 #include <memory.h>
 #include "premade_effects.h"
 

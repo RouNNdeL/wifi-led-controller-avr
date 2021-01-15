@@ -14,13 +14,12 @@
 #include <uart.h>
 #include <memory.h>
 
-extern void output_grb_pc2(uint8_t* ptr, uint16_t count);
+extern void output_grb_pc2(uint8_t *ptr, uint16_t count);
 
 volatile uint8_t uart_receive_size;
 volatile uint8_t uart_state;
-uint8_t* uart_data;
+uint8_t *uart_data;
 uint8_t uart_cmd;
-packet_data_t current_packet;
 uint8_t uart_invalid_count;
 
 volatile uint8_t new_frame;
@@ -49,12 +48,32 @@ void reboot() {
     for (;;);
 }
 
+void send_device(uint8_t device_index) {
+    uart_send(UART_BEGIN);
+    uart_send(CMD_DEVICE_RESPONSE);
+    uart_send(sizeof(device_settings) + 1);
+    uart_send(device_index);
+    uart_send_bytes((uint8_t *) &settings[device_index], sizeof(device_settings));
+    uart_send(UART_END);
+}
+
+void on_save(uint8_t device_index) {
+    save_frame = frame + SAVE_DELAY;
+    device_modified[device_index] = 1;
+    send_device(device_index);
+}
+
 uint8_t get_expected_message_size(uint8_t command) {
     switch (command) {
         case CMD_SAVE_DEVICE:
             return sizeof(device_settings) + 1;
         case CMD_GET_DEVICE:
             return 1;
+        case CMD_SET_COLOR:
+            return 4;
+        case CMD_SET_BRIGHTNESS:
+        case CMD_SET_STATE:
+            return 2;
         case CMD_GET_ALL_DEVICES:
         case CMD_REBOOT:
         default:
@@ -62,9 +81,9 @@ uint8_t get_expected_message_size(uint8_t command) {
     }
 }
 
-uint8_t valid_command(uint8_t command) {
-    return command == CMD_SAVE_DEVICE || command == CMD_GET_DEVICE ||
-           command == CMD_GET_ALL_DEVICES || command == CMD_REBOOT;
+uint8_t valid_command(uint8_t c) {
+    return c == CMD_SAVE_DEVICE || c == CMD_GET_DEVICE || c == CMD_GET_ALL_DEVICES || c == CMD_REBOOT ||
+           c == CMD_SET_STATE || c == CMD_SET_BRIGHTNESS || c == CMD_SET_COLOR;
 }
 
 /**
@@ -73,49 +92,71 @@ uint8_t valid_command(uint8_t command) {
  * @param data data buffer
  * @return non 0 if an ack response should be sent
  */
-uint8_t handle_data(uint8_t cmd, uint8_t* data) {
+uint8_t handle_data(uint8_t cmd, uint8_t *data) {
     switch (cmd) {
         case CMD_SAVE_DEVICE: {
             uint8_t device_index = data[0];
             if (device_index < DEVICE_COUNT) {
                 memcpy(&settings[device_index], data + 1, sizeof(device_settings));
-                device_modified[device_index] = 1;
-                save_frame = frame + SAVE_DELAY;
-                return CMD_SAVE_DEVICE_RESPONSE;
+                on_save(device_index);
+                return UART_SUCCESS;
             } else {
-                uart_send(UART_DEVICE_INDEX_OUT_OF_BOUNDS);
+                return UART_DEVICE_INDEX_OUT_OF_BOUNDS;
             }
-            break;
         }
         case CMD_GET_DEVICE: {
             uint8_t device_index = data[0];
             if (device_index < DEVICE_COUNT) {
-                uart_send(UART_BEGIN);
-                uart_send(CMD_DEVICE_RESPONSE);
-                uart_send(sizeof(device_settings));
-                uart_send_bytes((uint8_t*) &settings[device_index], sizeof(device_settings));
-                uart_send(UART_END);
-                return 0;
+                send_device(device_index);
             } else {
-                uart_send(UART_DEVICE_INDEX_OUT_OF_BOUNDS);
-                return 0;
+                return UART_DEVICE_INDEX_OUT_OF_BOUNDS;
+            }
+            break;
+        }
+        case CMD_GET_ALL_DEVICES: {
+            for (uint8_t i = 0; i < DEVICE_COUNT; ++i) {
+                send_device(i);
+            }
+            break;
+        }
+        case CMD_SET_STATE: {
+            uint8_t device_index = data[0];
+            if (device_index < DEVICE_COUNT) {
+                if (data[1]) {
+                    settings[device_index].flags |= FLAG_ON;
+                } else {
+                    settings[device_index].flags &= ~FLAG_ON;
+                }
+                on_save(device_index);
+                return UART_SUCCESS;
+            } else {
+                return UART_DEVICE_INDEX_OUT_OF_BOUNDS;
             }
         }
-        case CMD_GET_ALL_DEVICES:
-            uart_send(UART_BEGIN);
-            uart_send_bytes((uint8_t*) &current_packet, sizeof(current_packet));
-            uart_send(CMD_ALL_DEVICES_RESPONSE);
-            uart_send(sizeof(device_settings) * DEVICE_COUNT + 1);
-            uart_send(DEVICE_COUNT);
-
-            for (uint8_t i = 0; i < DEVICE_COUNT; ++i) {
-                uart_send_bytes((uint8_t*) &settings[i], sizeof(device_settings));
+        case CMD_SET_BRIGHTNESS: {
+            uint8_t device_index = data[0];
+            if (device_index < DEVICE_COUNT) {
+                settings[device_index].brightness = data[1];
+                on_save(device_index);
+                return UART_SUCCESS;
+            } else {
+                return UART_DEVICE_INDEX_OUT_OF_BOUNDS;
             }
-
-            uart_send(UART_END);
-        case CMD_REBOOT:
+        }
+        case CMD_SET_COLOR: {
+            uint8_t device_index = data[0];
+            if (device_index < DEVICE_COUNT) {
+                memcpy(&settings[device_index].color, data + 1, 3);
+                on_save(device_index);
+                return UART_SUCCESS;
+            } else {
+                return UART_DEVICE_INDEX_OUT_OF_BOUNDS;
+            }
+        }
+        case CMD_REBOOT: {
             reboot_frame = frame + REBOOT_DELAY;
             return CMD_REBOOT_RESPONSE;
+        }
     }
 
     return 0;
@@ -127,25 +168,11 @@ void handle_uart() {
             uint8_t val = uart_buffer_poll();
             if (val == UART_BEGIN) {
                 uart_invalid_count = 0;
-                uart_state = STATE_RECEIVE_PACKET_DATA;
+                uart_state = STATE_RECEIVE_COMMAND;
             } else {
                 uart_send(UART_INVALID_SEQUENCE);
                 uart_invalid_count++;
             }
-            break;
-        }
-        case STATE_RECEIVE_PACKET_DATA: {
-            if (uart_buffer_size() < sizeof(packet_data_t)) {
-                break;
-            }
-
-            uint8_t buf[sizeof(packet_data_t)];
-            for (size_t i = 0; i < sizeof(packet_data_t); ++i) {
-                buf[i] = uart_buffer_poll();
-            }
-
-            memcpy(&current_packet, buf, sizeof(packet_data_t));
-            uart_state = STATE_RECEIVE_COMMAND;
             break;
         }
         case STATE_RECEIVE_COMMAND:
@@ -194,7 +221,6 @@ void handle_uart() {
                     uint8_t response_cmd = handle_data(uart_cmd, uart_data);
                     if (response_cmd) {
                         uart_send(UART_BEGIN);
-                        uart_send_bytes((uint8_t*) &current_packet, sizeof(current_packet));
 
                         uint8_t ack_buf[] = {response_cmd, 1, UART_ACK, UART_END};
                         uart_send_bytes(ack_buf, sizeof(ack_buf));
@@ -260,13 +286,13 @@ void scale_timings(uint16_t src[TIME_COUNT], uint16_t dst[TIME_COUNT], uint8_t s
     }
 }
 
-void output_effect(device_settings s, uint8_t* index, led_count_t led_count) {
+void output_effect(device_settings s, uint8_t *index, led_count_t led_count) {
     device_effect effect = device_effects[s.effect % EFFECT_COUNT];
     uint16_t timing[TIME_COUNT];
     scale_timings(effect.timing, timing, s.effect_speed, effect.flags);
-    uint8_t* colors;
+    uint8_t *colors;
     uint8_t color_count; // Safety for effects with invalid configuration
-    if(effect.flags & EFFECT_FLAG_INHERIT_COLOR) {
+    if (effect.flags & EFFECT_FLAG_INHERIT_COLOR) {
         colors = s.color;
         color_count = 1;
     } else {
@@ -285,26 +311,34 @@ void output_leds() {
     led_count_t led_index = 0;
     for (uint8_t i = 0; i < DEVICE_COUNT; ++i) {
         led_count_t led_count = virtual_led_count[i];
-        uint8_t* index = led_buffer + led_index * 3;
+        uint8_t *index = led_buffer + led_index * 3;
         if (settings[i].flags & FLAG_ON) {
             if (settings[i].flags & FLAG_EFFECT_ON) {
                 output_effect(settings[i], index, led_count);
             } else {
                 set_all_colors(index, color_brightness(
-                        settings[i].brightness, color_from_buf(settings[i].color)), led_count, true);
+                        settings[i].brightness, color_from_buf(settings[i].color)), led_count);
             }
         } else {
             memset(index, 0, led_count * 3);
         }
 
-        if (settings[i].flags & FLAG_LOG_BRIGHTNESS)
+        if (settings[i].flags & FLAG_LOG_BRIGHTNESS) {
             for (uint8_t j = 0; j < led_count; ++j) {
                 index[j] = actual_brightness(index[j]);
             }
+        }
 
         led_index += led_count;
     }
 
+    uint8_t tmp;
+    for (uint8_t i = 0; i < LED_COUNT; ++i) {
+        uint8_t index = i * 3;
+        tmp = led_buffer[index];
+        led_buffer[index] = led_buffer[index + 1];
+        led_buffer[index + 1] = tmp;
+    }
     output_grb_pc2(led_buffer, sizeof(led_buffer));
 }
 
@@ -343,13 +377,8 @@ void init_avr() {
     uart_invalid_count = 0;
     reboot_frame = UINT32_MAX;
     save_frame = UINT32_MAX;
-    //read_all_settings(settings);
+    read_all_settings(settings);
     memset(led_buffer, 0, LED_COUNT * 3);
-    settings[1].flags = FLAG_ON | FLAG_EFFECT_ON | FLAG_LOG_BRIGHTNESS;
-    settings[1].effect = 3;
-    settings[1].brightness = UINT8_MAX;
-    settings[1].effect_speed = 5;
-    set_color_manual(settings[1].color, COLOR_RED);
     setup_effects(device_effects);
 }
 
@@ -369,7 +398,9 @@ int main() {
             new_frame = 0;
 
             if (uart_state == STATE_NONE) {
+                uart_send(UART_BUSY);
                 output_leds();
+                uart_send(UART_FREE);
             }
             wdt_reset();
 

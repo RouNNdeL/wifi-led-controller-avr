@@ -1,74 +1,31 @@
 #include <string.h>
-#include <stdint.h>
-#include "effects.h"
+#include <effects.h>
 
-#ifdef ARDUINO
-/* Credit: https://github.com/FastLED/FastLED */
-uint8_t scale8(uint8_t i, uint8_t scale) {
-    asm volatile(
-#define FASTLED_SCALE8_FIXED 0
-#if (FASTLED_SCALE8_FIXED == 1)
-    // Multiply 8-bit i * 8-bit scale, giving 16-bit r1,r0
-        "mul %0, %1          \n\t"
-        // Add i to r0, possibly setting the carry flag
-        "add r0, %0         \n\t"
-        // load the immediate 0 into i (note, this does _not_ touch any flags)
-        "ldi %0, 0x00       \n\t"
-        // walk and chew gum at the same time
-        "adc %0, r1          \n\t"
-#else
-    /* Multiply 8-bit i * 8-bit scale, giving 16-bit r1,r0 */
-    "mul %0, %1          \n\t"
-    /* Move the high 8-bits of the product (r1) back to i */
-    "mov %0, r1          \n\t"
-    /* Restore r1 to "0"; it's expected to always be that */
-#endif
-    "clr __zero_reg__    \n\t"
-
-    : "+a" (i)      /* writes to i */
-    : "a"  (scale)  /* uses scale */
-    : "r0", "r1"    /* clobbers r0, r1 */ );
-
-    /* Return the result */
-    return i;
+__attribute__ ((always_inline)) inline uint8_t scale8(uint8_t i, uint8_t scale) {
+    return (((int)i * (int)scale) >> 8) + ((i&&scale)?1:0);
 }
 
-#else
-
-uint8_t scale8(uint8_t i, uint8_t scale) {
-    return (i * scale >> 8) + 1;
-}
-
-#endif
-
-
-void set_color(uint8_t* p_buf, uint8_t led, uint8_t r, uint8_t g, uint8_t b) {
+void set_color(uint8_t *p_buf, uint8_t led, uint8_t r, uint8_t g, uint8_t b) {
     uint16_t index = 3 * led;
     p_buf[index++] = r;
     p_buf[index++] = g;
     p_buf[index] = b;
 }
 
-void set_color_grb(uint8_t* p_buf, uint8_t led, uint8_t r, uint8_t g, uint8_t b) {
+void set_color_grb(uint8_t *p_buf, uint8_t led, uint8_t r, uint8_t g, uint8_t b) {
     uint16_t index = 3 * led;
     p_buf[index++] = g;
     p_buf[index++] = r;
     p_buf[index] = b;
 }
 
-void set_all_colors(uint8_t* p_buf, uint8_t r, uint8_t g, uint8_t b, uint8_t count, uint8_t grb) {
-    if (grb) {
-        for (uint8_t i = 0; i < count; ++i) {
-            set_color_grb(p_buf, i, r, g, b);
-        }
-    } else {
-        for (uint8_t i = 0; i < count; ++i) {
-            set_color(p_buf, i, r, g, b);
-        }
+void set_all_colors(uint8_t *p_buf, uint8_t r, uint8_t g, uint8_t b, uint8_t count) {
+    for (uint8_t i = 0; i < count; ++i) {
+        set_color(p_buf, i, r, g, b);
     }
 }
 
-void cross_fade(uint8_t* color, uint8_t* colors, uint8_t n_color, uint8_t m_color, uint8_t progress) {
+void cross_fade(uint8_t *color, uint8_t *colors, uint8_t n_color, uint8_t m_color, uint8_t progress) {
     if (colors[n_color] > colors[m_color])
         color[0] = colors[n_color] - scale8(colors[n_color++] - colors[m_color++], progress);
     else
@@ -85,7 +42,7 @@ void cross_fade(uint8_t* color, uint8_t* colors, uint8_t n_color, uint8_t m_colo
         color[2] = colors[n_color] + scale8(colors[m_color] - colors[n_color], progress);
 }
 
-void cross_fade_values(uint8_t* color, uint8_t r1, uint8_t g1, uint8_t b1, uint8_t r2, uint8_t g2, uint8_t b2,
+void cross_fade_values(uint8_t *color, uint8_t r1, uint8_t g1, uint8_t b1, uint8_t r2, uint8_t g2, uint8_t b2,
                        uint8_t progress) {
     if (r1 > r2)
         color[0] = r1 - (r1 - r2) * (uint16_t) progress / UINT8_MAX;
@@ -103,7 +60,7 @@ void cross_fade_values(uint8_t* color, uint8_t r1, uint8_t g1, uint8_t b1, uint8
         color[2] = b1 + (b2 - b1) * (uint16_t) progress / UINT8_MAX;
 }
 
-void cross_fade_bright(uint8_t* color, uint8_t r1, uint8_t g1, uint8_t b1, uint8_t r2, uint8_t g2, uint8_t b2,
+void cross_fade_bright(uint8_t *color, uint8_t r1, uint8_t g1, uint8_t b1, uint8_t r2, uint8_t g2, uint8_t b2,
                        uint8_t progress) {
     uint8_t r_max = r1 > r2 ? r1 : r2;
     uint8_t g_max = g1 > g2 ? g1 : g2;
@@ -116,7 +73,7 @@ void cross_fade_bright(uint8_t* color, uint8_t r1, uint8_t g1, uint8_t b1, uint8
     }
 }
 
-void rainbow_at_progress_full(uint8_t* color, uint16_t progress, uint8_t brightness, uint8_t grb) {
+void rainbow_at_progress_full(uint8_t *color, uint16_t progress, uint8_t brightness, uint8_t grb) {
     if (progress <= 21845) {
         if (grb)
             cross_fade_bright(color, COLOR_GREEN, COLOR_BLUE, progress / 86);
@@ -137,7 +94,7 @@ void rainbow_at_progress_full(uint8_t* color, uint16_t progress, uint8_t brightn
     set_color_manual(color, color_brightness(brightness, color_from_buf(color)));
 }
 
-void rainbow_at_progress(uint8_t* color, uint16_t progress, uint8_t brightness, uint8_t grb) {
+void rainbow_at_progress(uint8_t *color, uint16_t progress, uint8_t brightness, uint8_t grb) {
     if (progress <= 21845) {
         if (grb)
             cross_fade_values(color, COLOR_GREEN, COLOR_BLUE, progress / 86);
@@ -158,8 +115,8 @@ void rainbow_at_progress(uint8_t* color, uint16_t progress, uint8_t brightness, 
     set_color_manual(color, color_brightness(brightness, color_from_buf(color)));
 }
 
-void rotate_buf(uint8_t* leds, uint8_t led_count, uint16_t rotation_progress, uint8_t start_led, uint16_t piece_leds,
-                uint8_t bit_pack, uint8_t* colors, uint8_t color_count) {
+void rotate_buf(uint8_t *leds, uint8_t led_count, uint16_t rotation_progress, uint8_t start_led, uint16_t piece_leds,
+                uint8_t bit_pack, uint8_t *colors, uint8_t color_count) {
     /* Which LED is the start led */
     uint8_t led_offset = (rotation_progress / (UINT16_MAX / led_count)) % led_count;
     /* What's left from the previous LED */
@@ -203,7 +160,7 @@ void rotate_buf(uint8_t* leds, uint8_t led_count, uint16_t rotation_progress, ui
  * @param color_count - how many colors are in use
  * @return - a color to be displayed at a given frame
  */
-void simple_effect(effect effect, uint8_t* color, uint32_t frame, uint16_t* times, uint8_t* args, uint8_t* colors,
+void simple_effect(effect effect, uint8_t *color, uint32_t frame, uint16_t *times, uint8_t *args, uint8_t *colors,
                    uint8_t color_count, uint8_t grb) {
     uint32_t sum = times[0] + times[1] + times[2] + times[3];
     uint32_t d_time = frame % sum;
@@ -286,12 +243,12 @@ void simple_effect(effect effect, uint8_t* color, uint32_t frame, uint16_t* time
  * @param color_count - how many colors are in use
  */
 void
-digital_effect(effect effect, uint8_t* leds, led_count_t led_count, uint8_t start_led, uint32_t frame, uint16_t* times,
-               uint8_t* args, uint8_t* colors, uint8_t color_count) {
+digital_effect(effect effect, uint8_t *leds, led_count_t led_count, uint8_t start_led, uint32_t frame, uint16_t *times,
+               uint8_t *args, uint8_t *colors, uint8_t color_count) {
     if (effect == BREATHE || effect == FADE || (effect == RAINBOW && (args[ARG_BIT_PACK] & RAINBOW_SIMPLE))) {
         uint8_t color[3];
         simple_effect(effect, color, frame, times, args, colors, color_count, 1);
-        set_all_colors(leds, color[0], color[1], color[2], led_count, 0);
+        set_all_colors(leds, color[0], color[1], color[2], led_count);
         return;
     }
     if (effect == FILLING_FADE || effect == FILL) {
@@ -305,7 +262,7 @@ digital_effect(effect effect, uint8_t* leds, led_count_t led_count, uint8_t star
         m_color *= 3;
 
         if ((d_time) < times[TIME_OFF]) {
-            set_all_colors(leds, 0x00, 0x00, 0x00, led_count, 0);
+            set_all_colors(leds, 0x00, 0x00, 0x00, led_count);
         } else if ((d_time -= times[TIME_OFF]) < times[TIME_FADEIN]) {
             //<editor-fold desc="Fade in">
             /* A 16bit replace for a float*/

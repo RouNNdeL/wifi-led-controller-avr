@@ -12,7 +12,6 @@
 #define BAUDRATE ((F_CPU)/(BAUD*16UL)-1)            // set baud rate value for UBRR
 
 #define STATE_NONE 0x00
-#define STATE_RECEIVE_PACKET_DATA 0x01
 #define STATE_RECEIVE_COMMAND 0x02
 #define STATE_RECEIVE_LENGTH 0x03
 #define STATE_RECEIVE_DATA 0x04
@@ -21,15 +20,23 @@
 #define UART_BEGIN 0xB0
 #define UART_END 0xB1
 #define UART_ACK 0xA0
+#define UART_FREE 0xA1
+#define UART_BUSY 0xA2
 
 #define CMD_SAVE_DEVICE 0x01
 #define CMD_GET_DEVICE 0x02
 #define CMD_GET_ALL_DEVICES 0x03
+#define CMD_SET_COLOR 0x04
+#define CMD_SET_BRIGHTNESS 0x05
+#define CMD_SET_STATE 0x06
+#define CMD_SET_EFFECT 0x07
 #define CMD_SAVE_DEVICE_RESPONSE 0xA1
 #define CMD_DEVICE_RESPONSE 0xA2
 #define CMD_ALL_DEVICES_RESPONSE 0xA3
 #define CMD_REBOOT 0xFF
 #define CMD_REBOOT_RESPONSE 0xFF
+
+#define UART_SUCCESS 0xBF
 
 #define UART_BUFFER_OVERFLOW 0xE0
 #define UART_INVALID_SEQUENCE 0xE1
@@ -37,10 +44,7 @@
 #define UART_DEVICE_INDEX_OUT_OF_BOUNDS 0xF1
 #define UART_INVALID_COMMAND 0xF2
 
-typedef struct {
-    uint8_t client_id;
-    uint16_t packet_id;
-} __attribute__((packed)) packet_data_t;
+#define UART_LENGTH_INVALID_COMMAND 0xFF
 
 void init_uart();
 
