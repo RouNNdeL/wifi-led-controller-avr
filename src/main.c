@@ -14,23 +14,31 @@
 #include <uart.h>
 #include <memory.h>
 
+typedef struct {
+    uint8_t from[3];
+    uint8_t to[3];
+    uint8_t progress;
+    uint8_t enabled;
+} transition_t;
+
 extern void output_grb_pc2(uint8_t *ptr, uint16_t count);
 
 volatile uint8_t uart_receive_size;
 volatile uint8_t uart_state;
 uint8_t *uart_data;
 uint8_t uart_cmd;
-uint8_t uart_invalid_count;
 
+uint8_t uart_invalid_count;
 volatile uint8_t new_frame;
 uint32_t frame;
 uint32_t reboot_frame;
+
 uint32_t save_frame;
 
-uint8_t device_modified[DEVICE_COUNT] = {0};
-
+uint8_t device_modified[DEVICE_COUNT];
 led_count_t virtual_led_count[DEVICE_COUNT] = VIRTUAL_DEVICES;
-device_settings settings[DEVICE_COUNT] = {0};
+device_settings settings[DEVICE_COUNT];
+transition_t transitions[DEVICE_COUNT] = {0};
 
 uint8_t led_buffer[LED_COUNT * 3];
 
@@ -61,6 +69,28 @@ void on_save(uint8_t device_index) {
     save_frame = frame + SAVE_DELAY;
     device_modified[device_index] = 1;
     send_device(device_index);
+}
+
+void get_color(uint8_t *dst, uint8_t device_index) {
+    if (transitions[device_index].enabled) {
+        cross_fade_values(dst, split_color(transitions[device_index].from),
+                          split_color(transitions[device_index].to), transitions[device_index].progress);
+    } else {
+        device_settings s = settings[device_index];
+        if (s.flags & FLAG_ON) {
+            color_man(dst, c_bright(s.brightness, split_color(s.color)));
+        } else {
+            memset(dst, 0, 3);
+        }
+    }
+}
+
+void begin_transition(uint8_t device_index, uint8_t target_color[3]) {
+    transition_t *t = &transitions[device_index];
+    get_color(t->from, device_index);
+    t->enabled = true;
+    t->progress = 0;
+    memcpy(t->to, target_color, 3);
 }
 
 uint8_t get_expected_message_size(uint8_t command) {
@@ -97,7 +127,16 @@ uint8_t handle_data(uint8_t cmd, uint8_t *data) {
         case CMD_SAVE_DEVICE: {
             uint8_t device_index = data[0];
             if (device_index < DEVICE_COUNT) {
-                memcpy(&settings[device_index], data + 1, sizeof(device_settings));
+                device_settings *new = (device_settings *) (data + 1);
+                uint8_t transition_color[3];
+                if (new->flags & FLAG_ON) {
+                    color_man(transition_color, c_bright(new->brightness, split_color(new->color)));
+                } else {
+                    memset(transition_color, 0, sizeof(transition_color));
+                }
+
+                begin_transition(device_index, transition_color);
+                memcpy(&settings[device_index], new, sizeof(device_settings));
                 on_save(device_index);
                 return UART_SUCCESS;
             } else {
@@ -123,8 +162,14 @@ uint8_t handle_data(uint8_t cmd, uint8_t *data) {
             uint8_t device_index = data[0];
             if (device_index < DEVICE_COUNT) {
                 if (data[1]) {
+                    uint8_t transition_color[3];
+                    color_man(transition_color, c_bright(settings[device_index].brightness,
+                                                         split_color(settings[device_index].color)));
+                    begin_transition(device_index, transition_color);
                     settings[device_index].flags |= FLAG_ON;
                 } else {
+                    uint8_t transition_color[3] = {0};
+                    begin_transition(device_index, transition_color);
                     settings[device_index].flags &= ~FLAG_ON;
                 }
                 on_save(device_index);
@@ -136,6 +181,9 @@ uint8_t handle_data(uint8_t cmd, uint8_t *data) {
         case CMD_SET_BRIGHTNESS: {
             uint8_t device_index = data[0];
             if (device_index < DEVICE_COUNT) {
+                uint8_t transition_color[3];
+                color_man(transition_color, c_bright(data[1], split_color(settings[device_index].color)));
+                begin_transition(device_index, transition_color);
                 settings[device_index].brightness = data[1];
                 on_save(device_index);
                 return UART_SUCCESS;
@@ -146,6 +194,9 @@ uint8_t handle_data(uint8_t cmd, uint8_t *data) {
         case CMD_SET_COLOR: {
             uint8_t device_index = data[0];
             if (device_index < DEVICE_COUNT) {
+                uint8_t transition_color[3];
+                color_man(transition_color, c_bright(settings[device_index].brightness, split_color(data + 1)));
+                begin_transition(device_index, transition_color);
                 memcpy(&settings[device_index].color, data + 1, 3);
                 on_save(device_index);
                 return UART_SUCCESS;
@@ -286,24 +337,47 @@ void scale_timings(uint16_t src[TIME_COUNT], uint16_t dst[TIME_COUNT], uint8_t s
     }
 }
 
-void output_effect(device_settings s, uint8_t *index, led_count_t led_count) {
+void advance_transitions() {
+    uint8_t step = 10; //(((uint16_t) TRANSITION_FRAMES) << 8) / FPS;
+    for (uint8_t i = 0; i < DEVICE_COUNT; ++i) {
+        transition_t *t = &transitions[i];
+        if (t->enabled) {
+            if (((uint16_t) t->progress) + step > UINT8_MAX) {
+                t->enabled = false;
+                t->progress = 0;
+                color_man(t->from, split_color(t->to));
+            } else {
+                t->progress += step;
+            }
+        }
+    }
+}
+
+void output_effect(uint8_t device_index, uint8_t *leds, led_count_t led_count) {
+    device_settings s = settings[device_index];
     device_effect effect = device_effects[s.effect % EFFECT_COUNT];
     uint16_t timing[TIME_COUNT];
     scale_timings(effect.timing, timing, s.effect_speed, effect.flags);
     uint8_t *colors;
     uint8_t color_count; // Safety for effects with invalid configuration
+
     if (effect.flags & EFFECT_FLAG_INHERIT_COLOR) {
-        colors = s.color;
+        colors = malloc(3);
+        get_color(colors, device_index);
         color_count = 1;
     } else {
         colors = effect.colors;
         color_count = effect.color_count;
     }
-    digital_effect(effect.effect, index, led_count, 0, frame,
+    digital_effect(effect.effect, leds, led_count, 0, frame,
                    timing, effect.args, colors, color_count);
 
-    for (uint8_t j = 0; j < led_count; ++j) {
-        set_color_manual(index + j, color_brightness(s.brightness, color_from_buf(index + j)));
+    if (effect.flags & EFFECT_FLAG_INHERIT_COLOR) {
+        free(colors);
+    } else {
+        for (uint8_t j = 0; j < led_count; ++j) {
+            color_man(leds + j, c_bright(s.brightness, split_color(leds + j)));
+        }
     }
 }
 
@@ -311,21 +385,19 @@ void output_leds() {
     led_count_t led_index = 0;
     for (uint8_t i = 0; i < DEVICE_COUNT; ++i) {
         led_count_t led_count = virtual_led_count[i];
-        uint8_t *index = led_buffer + led_index * 3;
-        if (settings[i].flags & FLAG_ON) {
-            if (settings[i].flags & FLAG_EFFECT_ON) {
-                output_effect(settings[i], index, led_count);
-            } else {
-                set_all_colors(index, color_brightness(
-                        settings[i].brightness, color_from_buf(settings[i].color)), led_count);
-            }
+        led_index_t *leds = led_buffer + led_index * 3;
+        device_settings s = settings[i];
+        if (s.flags & FLAG_EFFECT_ON) {
+            output_effect(i, leds, led_count);
         } else {
-            memset(index, 0, led_count * 3);
+            uint8_t color[3];
+            get_color(color, i);
+            set_all_colors(leds, split_color(color), led_count);
         }
 
-        if (settings[i].flags & FLAG_LOG_BRIGHTNESS) {
+        if (s.flags & FLAG_LOG_BRIGHTNESS) {
             for (uint8_t j = 0; j < led_count; ++j) {
-                index[j] = actual_brightness(index[j]);
+                leds[j] = actual_brightness(leds[j]);
             }
         }
 
@@ -350,6 +422,7 @@ void save_modified() {
         }
     }
 }
+
 
 void init_avr() {
     /* Setup ports */
@@ -396,6 +469,8 @@ int main() {
 
         if (new_frame && !(frame % TIMER_DIVIDE)) {
             new_frame = 0;
+
+            advance_transitions();
 
             if (uart_state == STATE_NONE) {
                 uart_send(UART_BUSY);

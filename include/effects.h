@@ -67,10 +67,10 @@
 #define is_black(buf) !(buf[0] || buf[1] || buf[2])
 #define _color_brightness(brightness, r, g, b) \
 scale8(r, brightness), scale8(g, brightness), scale8(b, brightness)
-#define color_brightness(brightness, ...) _color_brightness(brightness, __VA_ARGS__)
-#define color_from_buf(buf) (buf)[0], (buf)[1], (buf)[2]
+#define c_bright(brightness, ...) _color_brightness(brightness, __VA_ARGS__)
+#define split_color(buf) (buf)[0], (buf)[1], (buf)[2]
 
-#define set_color_manual(buf, ...) _set_color_manual(buf, __VA_ARGS__)
+#define color_man(buf, ...) _set_color_manual(buf, __VA_ARGS__)
 #define _set_color_manual(buf, r, g, b)\
 (buf)[0] = r;\
 (buf)[1] = g;\
@@ -131,27 +131,30 @@ typedef enum {
 
 } effect;
 
- uint8_t scale8(uint8_t i, uint8_t scale);
+uint8_t scale8(uint8_t i, uint8_t scale);
 
 void set_all_colors(uint8_t *p_buf, uint8_t r, uint8_t g, uint8_t b, uint8_t count);
 
-void set_color(uint8_t* p_buf, uint8_t led, uint8_t r, uint8_t g, uint8_t b);
+void cross_fade_values(uint8_t *color, uint8_t r1, uint8_t g1, uint8_t b1,
+                       uint8_t r2, uint8_t g2, uint8_t b2,uint8_t progress);
 
-void set_color_grb(uint8_t* p_buf, uint8_t led, uint8_t r, uint8_t g, uint8_t b);
+void set_color(uint8_t *p_buf, uint8_t led, uint8_t r, uint8_t g, uint8_t b);
 
-void cross_fade(uint8_t* color, uint8_t* colors, uint8_t n_color, uint8_t m_color, uint8_t progress);
+void set_color_grb(uint8_t *p_buf, uint8_t led, uint8_t r, uint8_t g, uint8_t b);
 
-void rotate_buf(uint8_t* leds, uint8_t led_count, uint16_t rotation_progress, uint8_t start_led, uint16_t piece_leds,
-                uint8_t bit_pack, uint8_t* colors, uint8_t color_count);
+void cross_fade(uint8_t *color, uint8_t *colors, uint8_t n_color, uint8_t m_color, uint8_t progress);
 
-void simple_effect(effect effect, uint8_t* color, uint32_t frame, uint16_t* times, uint8_t* args, uint8_t* colors,
+void rotate_buf(uint8_t *leds, uint8_t led_count, uint16_t rotation_progress, uint8_t start_led, uint16_t piece_leds,
+                uint8_t bit_pack, uint8_t *colors, uint8_t color_count);
+
+void simple_effect(effect effect, uint8_t *color, uint32_t frame, uint16_t *times, uint8_t *args, uint8_t *colors,
                    uint8_t color_count, uint8_t grb);
 
-void digital_effect(effect effect, uint8_t* leds, uint8_t led_count, uint8_t start_led, uint32_t frame, uint16_t* times,
-                    uint8_t* args, uint8_t* colors, uint8_t color_count);
+void digital_effect(effect effect, uint8_t *leds, uint8_t led_count, uint8_t start_led, uint32_t frame, uint16_t *times,
+                    uint8_t *args, uint8_t *colors, uint8_t color_count);
 
-uint8_t demo_music(uint8_t* fan_buf, uint8_t* pc_buf, uint8_t* gpu_buf, uint32_t frame);
+uint8_t demo_music(uint8_t *fan_buf, uint8_t *pc_buf, uint8_t *gpu_buf, uint32_t frame);
 
-uint8_t demo_effects(uint8_t* fan_buf, uint8_t* pc_buf, uint8_t* gpu_buf, uint32_t frame);
+uint8_t demo_effects(uint8_t *fan_buf, uint8_t *pc_buf, uint8_t *gpu_buf, uint32_t frame);
 
 #endif //LEDCONTROLLER_COLOR_UTILS_H

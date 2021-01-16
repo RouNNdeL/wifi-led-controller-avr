@@ -8,9 +8,9 @@
 #include <stdint.h>
 
 // Devices
-#define VIRTUAL_DEVICES {1, 54,54}
-#define LED_COUNT 109
-#define DEVICE_COUNT 3
+#define VIRTUAL_DEVICES {1, 20}
+#define LED_COUNT 21
+#define DEVICE_COUNT 2
 
 // Effects
 #define EFFECT_COUNT 4
@@ -39,12 +39,5 @@ typedef uint16_t uart_buffer_t;
 #define SAVE_DELAY (5 * FPS)
 #define REBOOT_DELAY (FPS / 10)
 #define TRANSITION_FRAMES 32
-#define TRANSITION_QUICK_FRAMES 20
-
-/*
- * The transition doesn't look well, probably due to more calculations taking place,
- * hence the option to disable it
- */
-#define TRANSITION_EFFECTS 0
 
 #endif //AVR_CONFIG_H
