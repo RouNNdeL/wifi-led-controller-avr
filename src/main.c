@@ -338,7 +338,7 @@ void scale_timings(uint16_t src[TIME_COUNT], uint16_t dst[TIME_COUNT], uint8_t s
 }
 
 void advance_transitions() {
-    uint8_t step = 10; //(((uint16_t) TRANSITION_FRAMES) << 8) / FPS;
+    uint8_t step = UINT8_MAX / TRANSITION_FRAMES;
     for (uint8_t i = 0; i < DEVICE_COUNT; ++i) {
         transition_t *t = &transitions[i];
         if (t->enabled) {
