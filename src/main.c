@@ -382,10 +382,10 @@ void output_effect(uint8_t device_index, uint8_t *leds, led_count_t led_count) {
 }
 
 void output_leds() {
-    led_count_t led_index = 0;
+    led_index_t led_index = 0;
     for (uint8_t i = 0; i < DEVICE_COUNT; ++i) {
         led_count_t led_count = virtual_led_count[i];
-        led_index_t *leds = led_buffer + led_index * 3;
+        uint8_t *leds = led_buffer + led_index * 3;
         device_settings s = settings[i];
         if (s.flags & FLAG_EFFECT_ON) {
             output_effect(i, leds, led_count);
@@ -396,7 +396,7 @@ void output_leds() {
         }
 
         if (s.flags & FLAG_LOG_BRIGHTNESS) {
-            for (uint8_t j = 0; j < led_count; ++j) {
+            for (led_index_t j = 0; j < led_count * 3; ++j) {
                 leds[j] = actual_brightness(leds[j]);
             }
         }
@@ -404,9 +404,11 @@ void output_leds() {
         led_index += led_count;
     }
 
+    //set_all_colors(led_buffer + 3, 255, 118, 72, LED_COUNT - 1);
+
     uint8_t tmp;
-    for (uint8_t i = 0; i < LED_COUNT; ++i) {
-        uint8_t index = i * 3;
+    for (led_count_t i = 0; i < LED_COUNT; ++i) {
+        led_index_t index = i * 3;
         tmp = led_buffer[index];
         led_buffer[index] = led_buffer[index + 1];
         led_buffer[index + 1] = tmp;
@@ -452,6 +454,7 @@ void init_avr() {
     save_frame = UINT32_MAX;
     read_all_settings(settings);
     memset(led_buffer, 0, LED_COUNT * 3);
+
     setup_effects(device_effects);
 }
 
