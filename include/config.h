@@ -11,6 +11,7 @@
 #define VIRTUAL_DEVICES {1, 20}
 #define LED_COUNT 21
 #define DEVICE_COUNT 2
+#define MAX_TEMP_SENSOR_COUNT 4
 
 // Effects
 #define EFFECT_COUNT 4
@@ -30,6 +31,18 @@ typedef uint16_t uart_buffer_t;
 typedef uint8_t uart_buffer_t;
 #else
 typedef uint16_t uart_buffer_t;
+#endif
+
+#if (LED_COUNT > 85)
+typedef uint16_t led_index_t;
+#else
+typedef uint8_t led_index_t;
+#endif /* (LED_COUNT > 85) */
+
+#if LED_COUNT <= 255
+typedef uint8_t led_count_t;
+#else
+typedef uint16_t led_count_t;
 #endif
 
 /* FPS * TIMER_DIVIDE = 64 */

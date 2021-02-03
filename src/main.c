@@ -5,7 +5,6 @@
 #include <stdint.h>
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include <avr/eeprom.h>
 #include <avr/wdt.h>
 #include <effects.h>
 #include <string.h>
@@ -13,6 +12,8 @@
 #include <stdbool.h>
 #include <uart.h>
 #include <memory.h>
+#include <ds18b20.h>
+#include <romsearch.h>
 
 typedef struct {
     uint8_t from[3];
@@ -21,11 +22,11 @@ typedef struct {
     uint8_t enabled;
 } transition_t;
 
-extern void output_grb_pc2(uint8_t *ptr, uint16_t count);
+extern void output_grb_pc2(uint8_t* ptr, uint16_t count);
 
 volatile uint8_t uart_receive_size;
 volatile uint8_t uart_state;
-uint8_t *uart_data;
+uint8_t* uart_data;
 uint8_t uart_cmd;
 
 uint8_t uart_invalid_count;
@@ -42,6 +43,9 @@ transition_t transitions[DEVICE_COUNT] = {0};
 
 uint8_t led_buffer[LED_COUNT * 3];
 
+uint8_t temp_rom_addr[8 * MAX_TEMP_SENSOR_COUNT];
+uint8_t temp_sensor_count;
+
 /*
  * TODO: Save effects in the EEPROM, and load on demand.
  * We can introduce a config variable to compile to read effects from setup_effects and save them in the EEPROM.
@@ -56,12 +60,43 @@ void reboot() {
     for (;;);
 }
 
+void read_temperatures(int16_t* temperatures) {
+    for (uint8_t i = 0; i < temp_sensor_count; ++i) {
+        uint8_t* address = temp_rom_addr + 8 * i * sizeof(uint8_t);
+        uint8_t status = ds18b20convert(&PORTD, &DDRD, &PIND, (1 << 3), address);
+        temperatures[i] = INT16_MIN;
+
+        if (status != DS18B20_ERROR_OK) {
+            continue;
+        }
+
+        status = ds18b20read(&PORTD, &DDRD, &PIND, (1 << 3), address, temperatures + i * sizeof(int16_t));
+        if (status != DS18B20_ERROR_OK) {
+            continue;
+        }
+    }
+}
+
+void send_temperatures() {
+    int16_t* temperatures = malloc(sizeof(int16_t) * temp_sensor_count);
+    read_temperatures(temperatures);
+
+    uart_send(UART_BEGIN);
+    uart_send(CMD_GET_TEMPS_RESPONSE);
+    uart_send(sizeof(temperatures) + 1);
+    uart_send(temp_sensor_count);
+    uart_send_bytes((uint8_t*) temperatures, sizeof(temperatures));
+    uart_send(UART_END);
+
+    free(temperatures);
+}
+
 void send_device(uint8_t device_index) {
     uart_send(UART_BEGIN);
     uart_send(CMD_DEVICE_RESPONSE);
     uart_send(sizeof(device_settings) + 1);
     uart_send(device_index);
-    uart_send_bytes((uint8_t *) &settings[device_index], sizeof(device_settings));
+    uart_send_bytes((uint8_t*) &settings[device_index], sizeof(device_settings));
     uart_send(UART_END);
 }
 
@@ -71,7 +106,7 @@ void on_save(uint8_t device_index) {
     send_device(device_index);
 }
 
-void get_color(uint8_t *dst, uint8_t device_index) {
+void get_color(uint8_t* dst, uint8_t device_index) {
     if (transitions[device_index].enabled) {
         cross_fade_values(dst, split_color(transitions[device_index].from),
                           split_color(transitions[device_index].to), transitions[device_index].progress);
@@ -86,7 +121,7 @@ void get_color(uint8_t *dst, uint8_t device_index) {
 }
 
 void begin_transition(uint8_t device_index, uint8_t target_color[3]) {
-    transition_t *t = &transitions[device_index];
+    transition_t* t = &transitions[device_index];
     get_color(t->from, device_index);
     t->enabled = true;
     t->progress = 0;
@@ -105,6 +140,8 @@ uint8_t get_expected_message_size(uint8_t command) {
         case CMD_SET_STATE:
             return 2;
         case CMD_GET_ALL_DEVICES:
+        case CMD_GET_TEMPS_COUNT:
+        case CMD_GET_TEMPS:
         case CMD_REBOOT:
         default:
             return 0;
@@ -113,7 +150,8 @@ uint8_t get_expected_message_size(uint8_t command) {
 
 uint8_t valid_command(uint8_t c) {
     return c == CMD_SAVE_DEVICE || c == CMD_GET_DEVICE || c == CMD_GET_ALL_DEVICES || c == CMD_REBOOT ||
-           c == CMD_SET_STATE || c == CMD_SET_BRIGHTNESS || c == CMD_SET_COLOR;
+           c == CMD_SET_STATE || c == CMD_SET_BRIGHTNESS || c == CMD_SET_COLOR || c == CMD_GET_TEMPS ||
+           c == CMD_GET_TEMPS_COUNT;
 }
 
 /**
@@ -122,12 +160,12 @@ uint8_t valid_command(uint8_t c) {
  * @param data data buffer
  * @return non 0 if an ack response should be sent
  */
-uint8_t handle_data(uint8_t cmd, uint8_t *data) {
+uint8_t handle_data(uint8_t cmd, uint8_t* data) {
     switch (cmd) {
         case CMD_SAVE_DEVICE: {
             uint8_t device_index = data[0];
             if (device_index < DEVICE_COUNT) {
-                device_settings *new = (device_settings *) (data + 1);
+                device_settings* new = (device_settings*) (data + 1);
                 uint8_t transition_color[3];
                 if (new->flags & FLAG_ON) {
                     color_man(transition_color, c_bright(new->brightness, split_color(new->color)));
@@ -203,6 +241,18 @@ uint8_t handle_data(uint8_t cmd, uint8_t *data) {
             } else {
                 return UART_DEVICE_INDEX_OUT_OF_BOUNDS;
             }
+        }
+        case CMD_GET_TEMPS: {
+            send_temperatures();
+            break;
+        }
+        case CMD_GET_TEMPS_COUNT: {
+            uart_send(UART_BEGIN);
+            uart_send(CMD_GET_TEMPS_COUNT_RESPONSE);
+            uart_send(1);
+            uart_send(temp_sensor_count);
+            uart_send(UART_END);
+            break;
         }
         case CMD_REBOOT: {
             reboot_frame = frame + REBOOT_DELAY;
@@ -340,7 +390,7 @@ void scale_timings(uint16_t src[TIME_COUNT], uint16_t dst[TIME_COUNT], uint8_t s
 void advance_transitions() {
     uint8_t step = UINT8_MAX / TRANSITION_FRAMES;
     for (uint8_t i = 0; i < DEVICE_COUNT; ++i) {
-        transition_t *t = &transitions[i];
+        transition_t* t = &transitions[i];
         if (t->enabled) {
             if (((uint16_t) t->progress) + step > UINT8_MAX) {
                 t->enabled = false;
@@ -353,12 +403,12 @@ void advance_transitions() {
     }
 }
 
-void output_effect(uint8_t device_index, uint8_t *leds, led_count_t led_count) {
+void output_effect(uint8_t device_index, uint8_t* leds, led_count_t led_count) {
     device_settings s = settings[device_index];
     device_effect effect = device_effects[s.effect % EFFECT_COUNT];
     uint16_t timing[TIME_COUNT];
     scale_timings(effect.timing, timing, s.effect_speed, effect.flags);
-    uint8_t *colors;
+    uint8_t* colors;
     uint8_t color_count; // Safety for effects with invalid configuration
 
     if (effect.flags & EFFECT_FLAG_INHERIT_COLOR) {
@@ -385,7 +435,7 @@ void output_leds() {
     led_index_t led_index = 0;
     for (uint8_t i = 0; i < DEVICE_COUNT; ++i) {
         led_count_t led_count = virtual_led_count[i];
-        uint8_t *leds = led_buffer + led_index * 3;
+        uint8_t* leds = led_buffer + led_index * 3;
         device_settings s = settings[i];
         if (s.flags & FLAG_EFFECT_ON) {
             output_effect(i, leds, led_count);
@@ -425,7 +475,6 @@ void save_modified() {
     }
 }
 
-
 void init_avr() {
     /* Setup ports */
     DDRC = 0x04;
@@ -456,6 +505,13 @@ void init_avr() {
     memset(led_buffer, 0, LED_COUNT * 3);
 
     setup_effects(device_effects);
+
+    ds18b20search(&PORTD, &DDRD, &PIND, (1 << 3), &temp_sensor_count, temp_rom_addr, sizeof(temp_rom_addr));
+
+    // The first read seems to sometimes be wrong, read and ignore it
+    int16_t* temperatures = malloc(sizeof(int16_t) * temp_sensor_count);
+    read_temperatures(temperatures);
+    free(temperatures);
 }
 
 int main() {

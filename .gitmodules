@@ -1,0 +1,3 @@
+[submodule "lib/ds18b20"]
+	path = lib/ds18b20
+	url = git@github.com:Jacajack/avr-ds18b20.git
