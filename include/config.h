@@ -8,9 +8,9 @@
 #include <stdint.h>
 
 // Devices
-#define VIRTUAL_DEVICES {1, 20}
-#define LED_COUNT 21
-#define DEVICE_COUNT 2
+#define VIRTUAL_DEVICES {1, 54, 54}
+#define LED_COUNT 109
+#define DEVICE_COUNT 3
 #define MAX_TEMP_SENSOR_COUNT 4
 
 // Effects

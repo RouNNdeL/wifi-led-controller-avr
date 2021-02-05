@@ -91,6 +91,17 @@ void send_temperatures() {
     free(temperatures);
 }
 
+void send_temp_info() {
+    uart_send(UART_BEGIN);
+    uart_send(CMD_GET_TEMPS_INFO_RESPONSE);
+    uart_send(1 + temp_sensor_count * 8);
+    uart_send(temp_sensor_count);
+    for (uint8_t i = 0; i < temp_sensor_count; ++i) {
+        uart_send_bytes(temp_rom_addr + i * 8, 8);
+    }
+    uart_send(UART_END);
+}
+
 void send_device(uint8_t device_index) {
     uart_send(UART_BEGIN);
     uart_send(CMD_DEVICE_RESPONSE);
@@ -140,7 +151,7 @@ uint8_t get_expected_message_size(uint8_t command) {
         case CMD_SET_STATE:
             return 2;
         case CMD_GET_ALL_DEVICES:
-        case CMD_GET_TEMPS_COUNT:
+        case CMD_GET_TEMPS_INFO:
         case CMD_GET_TEMPS:
         case CMD_REBOOT:
         default:
@@ -151,7 +162,7 @@ uint8_t get_expected_message_size(uint8_t command) {
 uint8_t valid_command(uint8_t c) {
     return c == CMD_SAVE_DEVICE || c == CMD_GET_DEVICE || c == CMD_GET_ALL_DEVICES || c == CMD_REBOOT ||
            c == CMD_SET_STATE || c == CMD_SET_BRIGHTNESS || c == CMD_SET_COLOR || c == CMD_GET_TEMPS ||
-           c == CMD_GET_TEMPS_COUNT;
+           c == CMD_GET_TEMPS_INFO;
 }
 
 /**
@@ -246,12 +257,8 @@ uint8_t handle_data(uint8_t cmd, uint8_t* data) {
             send_temperatures();
             break;
         }
-        case CMD_GET_TEMPS_COUNT: {
-            uart_send(UART_BEGIN);
-            uart_send(CMD_GET_TEMPS_COUNT_RESPONSE);
-            uart_send(1);
-            uart_send(temp_sensor_count);
-            uart_send(UART_END);
+        case CMD_GET_TEMPS_INFO: {
+            send_temp_info();
             break;
         }
         case CMD_REBOOT: {
@@ -512,6 +519,8 @@ void init_avr() {
     int16_t* temperatures = malloc(sizeof(int16_t) * temp_sensor_count);
     read_temperatures(temperatures);
     free(temperatures);
+
+    send_temp_info();
 }
 
 int main() {
